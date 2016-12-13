@@ -7,34 +7,138 @@ using Microsoft.VisualStudio.Services.Identity;
 using Microsoft.VisualStudio.Services.Identity.Client;
 using Microsoft.VisualStudio.Services.Licensing;
 using Microsoft.VisualStudio.Services.Licensing.Client;
+using System.Diagnostics;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.ApplicationInsights.DataContracts;
+using CommandLine;
+using System.IO;
 
-namespace AddUserToAccount
+namespace VstsUserManagement.ConsoleApp
 {
     public class Program
     {
-        public static void Main(string[] args)
+        abstract class BaseOptions
         {
-            if (args.Length == 0)
-            {
-                // For ease of running from the debugger, hard-code the account and the email address if not supplied
-                // The account name here is just the name, not the URL.
-                //args = new[] { "Awesome", "example@outlook.com", "basic" };
-            }
-
-            if (!Init(args))
-            {
-                Console.WriteLine("Add a licensed user to a Visual Studio Account");
-                Console.WriteLine("Usage: [accountName] [userEmailAddress] <license>");
-                Console.WriteLine("  accountName - just the name of the account, not the URL");
-                Console.WriteLine("  userEmailAddress - email address of the user to be added");
-                Console.WriteLine("  license - optional license (default is Basic): Basic, Professional, or Advanced");
-                return;
-            }
-
-            AddUserToAccount();
+            [Option('n', "VssAccountName", Required = true, HelpText = "VssAccountName")]
+            public string VssAccountName { get; set; }
+            [Option('u', "VssAccountUrl", Required = true, HelpText = "VssAccountUrl")]
+            public string VssAccountUrl { get; set; }
         }
 
-        private static void AddUserToAccount()
+        [Verb("adduser", HelpText = "Add User Directly")]
+        class AddUser : BaseOptions
+        {
+            [Option('m', "VssUserToAddMailAddress", Required = true, HelpText = "VssUserToAddMailAddress")]
+            public string VssUserToAddMailAddress { get; set; }
+            [Option('l', "VssLicense", Required = true, HelpText = "VssLicense")]
+            public string VssLicense { get; set; }
+        }
+        [Verb("addusers", HelpText = "Add Users from file.")]
+        class AddUsers : BaseOptions
+        {
+            [Option('c', "Csv", Required = true, HelpText = "CSV of users.. [VssUserToAddMailAddress],[VssLicense] .")]
+            public string Csv { get; set; }
+        }
+
+        public static int Main(string[] args)
+        {
+           // Telemetry.Current.TrackEvent("ApplicationStart");
+           // AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+            DateTime startTime = DateTime.Now;
+            Stopwatch mainTimer = new Stopwatch();
+            mainTimer.Start();
+            //////////////////////////////////////////////////
+            Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
+            Trace.Listeners.Add(new TextWriterTraceListener(string.Format(@"{0}-{1}.log", DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss"), "MigrationRun"), "myListener"));
+            //////////////////////////////////////////////////
+            Trace.WriteLine(System.Reflection.Assembly.GetExecutingAssembly().GetName().Name, "VstsUserManagement");
+            Trace.WriteLine(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(), "VstsUserManagement");
+           // Trace.WriteLine(string.Format("Telemitery Enabled: {0}", Telemetry.Current.IsEnabled().ToString()), "VstsUserManagement");
+           // Trace.WriteLine(string.Format("SessionID: {0}", Telemetry.Current.Context.Session.Id), "VstsUserManagement");
+           // Trace.WriteLine(string.Format("User: {0}", Telemetry.Current.Context.User.Id), "VstsUserManagement");
+            Trace.WriteLine(string.Format("Start Time: {0}", startTime.ToUniversalTime()), "VstsUserManagement");
+            Trace.WriteLine("----------------------------------------------------------------", "VstsUserManagement");
+            Trace.WriteLine("------------------------------START-----------------------------", "VstsUserManagement");
+            Trace.WriteLine("----------------------------------------------------------------", "VstsUserManagement");
+            //////////////////////////////////////////////////
+            int result = (int)Parser.Default.ParseArguments<AddUser, AddUsers>(args).MapResult(
+                (AddUser opts) => RunAddUserAndReturnExitCode(opts),
+                (AddUsers opts) => RunAddUsersAndReturnExitCode(opts),
+                errs => 1);
+            //////////////////////////////////////////////////
+            Trace.WriteLine("----------------------------------------------------------------", "VstsUserManagement");
+            Trace.WriteLine("-------------------------------END------------------------------", "VstsUserManagement");
+            Trace.WriteLine("----------------------------------------------------------------", "VstsUserManagement");
+            mainTimer.Stop();
+            //Telemetry.Current.TrackEvent("ApplicationEnd", null,
+            //    new Dictionary<string, double> {
+            //            { "ApplicationDuration", mainTimer.ElapsedMilliseconds }
+            //    });
+            //if (Telemetry.Current != null)
+            //{
+            //    Telemetry.Current.Flush();
+            //    // Allow time for flushing:
+            //    System.Threading.Thread.Sleep(1000);
+            //}
+            Trace.WriteLine(string.Format("Duration: {0}", mainTimer.Elapsed.ToString("c")), "VstsUserManagement");
+            Trace.WriteLine(string.Format("End Time: {0}", startTime.ToUniversalTime()), "VstsUserManagement");
+#if DEBUG
+            Console.ReadKey();
+#endif
+            return result;
+        }
+
+        private static int RunAddUsersAndReturnExitCode(AddUsers opts)
+        {
+            throw new NotImplementedException();
+            var csvRows = File.ReadAllLines(opts.Csv);
+            foreach (var row in csvRows)
+            {
+                string[] bits = row.Split(',');
+                License VssLicense = ConvertStringToLicence(bits[1]);
+                AddUserToAccount(opts.VssAccountName, opts.VssAccountUrl, bits[0], VssLicense);
+            }
+        }
+
+        private static int RunAddUserAndReturnExitCode(AddUser opts)
+        {
+            License VssLicense = ConvertStringToLicence(opts.VssLicense);
+            AddUserToAccount(opts.VssAccountName, opts.VssAccountUrl, opts.VssUserToAddMailAddress, VssLicense);
+            return 0;
+        }
+
+        private static License ConvertStringToLicence(string license)
+        {
+            License VssLicense = AccountLicense.Express; // default to Basic license
+            switch (license)
+            {
+                case "basic":
+                    VssLicense = AccountLicense.Express;
+                    break;
+                case "professional":
+                    VssLicense = AccountLicense.Professional;
+                    break;
+                case "advanced":
+                    VssLicense = AccountLicense.Advanced;
+                    break;
+                case "msdn":
+                    // When the user logs in, the system will determine the actual MSDN benefits for the user.
+                    VssLicense = MsdnLicense.Eligible;
+                    break;
+                // Uncomment the code for Stakeholder if you are using VS 2013 Update 4 or newer.
+                //case "Stakeholder":
+                //    VssLicense = AccountLicense.Stakeholder;
+                //    break;
+                default:
+                    Console.WriteLine("Error: License must be Basic, Professional, Advanced, or MSDN");
+                    throw new Exception("Error: License must be Basic, Professional, Advanced, or MSDN");
+            }
+            return VssLicense;
+        }
+
+            private static void AddUserToAccount(string VssAccountName, string VssAccountUrl, string VssUserToAddMailAddress, License VssLicense)
         {
             try
             {
@@ -124,73 +228,7 @@ namespace AddUserToAccount
             }
         }
 
-        private static bool Init(string[] args)
-        {
-            if (args == null || args.Length < 2)
-            {
-                return false;
-            }
 
-            if (string.IsNullOrWhiteSpace(args[0]))
-            {
-                Console.WriteLine("Error: Invalid accountName");
-                return false;
-            }
-
-            VssAccountName = args[0];
-
-            // We need to talk to SPS in order to add a user and assign a license.
-            VssAccountUrl = "https://" + VssAccountName + ".vssps.visualstudio.com/";
-
-            if (string.IsNullOrWhiteSpace(args[1]))
-            {
-                Console.WriteLine("Error: Invalid userEmailAddress");
-                return false;
-            }
-
-            VssUserToAddMailAddress = args[1];
-
-            VssLicense = AccountLicense.Express; // default to Basic license
-            if (args.Length == 3)
-            {
-                string license = args[2].ToLowerInvariant();
-                switch (license)
-                {
-                    case "basic":
-                        VssLicense = AccountLicense.Express;
-                        break;
-                    case "professional":
-                        VssLicense = AccountLicense.Professional;
-                        break;
-                    case "advanced":
-                        VssLicense = AccountLicense.Advanced;
-                        break;
-                    case "msdn":
-                        // When the user logs in, the system will determine the actual MSDN benefits for the user.
-                        VssLicense = MsdnLicense.Eligible;
-                        break;
-                    // Uncomment the code for Stakeholder if you are using VS 2013 Update 4 or newer.
-                    //case "Stakeholder":
-                    //    VssLicense = AccountLicense.Stakeholder;
-                    //    break;
-                    default:
-                        Console.WriteLine("Error: License must be Basic, Professional, Advanced, or MSDN");
-                        //Console.WriteLine("Error: License must be Stakeholder, Basic, Professional, Advanced, or MSDN");
-                        return false;
-                }
-            }
-
-            return true;
-        }
-
-        public static string VssAccountUrl { get; set; }
-
-        public static string VssAccountName { get; set; }
-
-        public static string VssUserToAddMailAddress { get; set; }
-
-        public static License VssLicense { get; set; }
     }
-
 
 }
