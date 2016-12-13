@@ -14,6 +14,10 @@ using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.DataContracts;
 using CommandLine;
 using System.IO;
+using Microsoft.TeamFoundation.Server;
+using Microsoft.TeamFoundation.Core.WebApi;
+using System.Collections.Generic;
+using System.Text;
 
 namespace VstsUserManagement.ConsoleApp
 {
@@ -25,6 +29,10 @@ namespace VstsUserManagement.ConsoleApp
             public string VssAccountName { get; set; }
             [Option('u', "VssAccountUrl", Required = true, HelpText = "VssAccountUrl")]
             public string VssAccountUrl { get; set; }
+            [Option('p', "project", Required = false, HelpText = "Project to add users to")]
+            public string Project { get; set; }
+            [Option('g', "group", Required = false, HelpText = "Group in Project to add users to")]
+            public string Group { get; set; }
         }
 
         [Verb("adduser", HelpText = "Add User Directly")]
@@ -34,6 +42,7 @@ namespace VstsUserManagement.ConsoleApp
             public string VssUserToAddMailAddress { get; set; }
             [Option('l', "VssLicense", Required = true, HelpText = "VssLicense")]
             public string VssLicense { get; set; }
+            
         }
         [Verb("addusers", HelpText = "Add Users from file.")]
         class AddUsers : BaseOptions
@@ -92,21 +101,48 @@ namespace VstsUserManagement.ConsoleApp
 
         private static int RunAddUsersAndReturnExitCode(AddUsers opts)
         {
+            CreateAuthConnection(opts.VssAccountUrl);
             var csvRows = File.ReadAllLines(opts.Csv);
             foreach (var row in csvRows)
             {
                 string[] bits = row.Split(',');
                 License VssLicense = ConvertStringToLicence(bits[1].ToLower());
-                AddUserToAccount(opts.VssAccountName, opts.VssAccountUrl, bits[0], VssLicense);
+                AddUserToAccount(opts.VssAccountName, bits[0], VssLicense);
+                if (!string.IsNullOrEmpty(opts.Project))
+                {
+                    AddUserToSecurityGroup(opts.Project, opts.Group, bits[0]);
+                }
+                
             }
             return 0;
         }
 
         private static int RunAddUserAndReturnExitCode(AddUser opts)
         {
+            CreateAuthConnection(opts.VssAccountUrl);
             License VssLicense = ConvertStringToLicence(opts.VssLicense);
-            AddUserToAccount(opts.VssAccountName, opts.VssAccountUrl, opts.VssUserToAddMailAddress, VssLicense);
+            AddUserToAccount(opts.VssAccountName, opts.VssUserToAddMailAddress, VssLicense);
+            if (!string.IsNullOrEmpty(opts.Project))
+            {
+                AddUserToSecurityGroup(opts.Project, opts.Group, opts.VssUserToAddMailAddress);
+            }
             return 0;
+        }
+
+        static LicensingHttpClient licensingClient;
+        static IdentityHttpClient identityClient;
+        static VssConnection vssConnection;
+
+        private static void CreateAuthConnection(string VssAccountUrl)
+        {
+            // Create a connection to the specified account.
+            // If you change the false to true, your credentials will be saved.
+            var creds = new VssClientCredentials(true);
+            vssConnection = new VssConnection(new Uri(VssAccountUrl), creds);
+
+            // We need the clients for two services: Licensing and Identity
+            licensingClient = vssConnection.GetClient<LicensingHttpClient>();
+            identityClient = vssConnection.GetClient<IdentityHttpClient>();
         }
 
         private static License ConvertStringToLicence(string license)
@@ -138,26 +174,23 @@ namespace VstsUserManagement.ConsoleApp
             return VssLicense;
         }
 
-            private static void AddUserToAccount(string VssAccountName, string VssAccountUrl, string VssUserToAddMailAddress, License VssLicense)
+       static List<string> fubarAccounts = new List<string>();
+
+            private static void AddUserToAccount(string VssAccountName, string VssUserToAddMailAddress, License VssLicense)
         {
             try
             {
-                // Create a connection to the specified account.
-                // If you change the false to true, your credentials will be saved.
-                var creds = new VssClientCredentials(false);
-                var vssConnection = new VssConnection(new Uri(VssAccountUrl), creds);
-
-                // We need the clients for two services: Licensing and Identity
-                var licensingClient = vssConnection.GetClient<LicensingHttpClient>();
-                var identityClient = vssConnection.GetClient<IdentityHttpClient>();
-
                 // The first call is to see if the user already exists in the account.
                 // Since this is the first call to the service, this will trigger the sign-in window to pop up.
                 Console.WriteLine("Sign in as the admin of account {0}. You will see a sign-in window on the desktop.",
                                   VssAccountName);
                 var userIdentity = identityClient.ReadIdentitiesAsync(IdentitySearchFilter.AccountName,
                                                                       VssUserToAddMailAddress).Result.FirstOrDefault();
-
+                if (userIdentity == null)
+                {
+                    var username = VssUserToAddMailAddress.Substring(0, VssUserToAddMailAddress.IndexOf("@"));
+                    userIdentity = identityClient.ReadIdentitiesAsync(IdentitySearchFilter.General, VssUserToAddMailAddress).Result.FirstOrDefault();
+                }
                 // If the identity is null, this is a user that has not yet been added to the account.
                 // We'll need to add the user as a "bind pending" - meaning that the email address of the identity is 
                 // recorded so that the user can log into the account, but the rest of the details of the identity 
@@ -219,6 +252,10 @@ namespace VstsUserManagement.ConsoleApp
             }
             catch (Exception e)
             {
+                using (StreamWriter sw = File.AppendText("fubarAccounts.txt"))
+                {
+                    sw.WriteLine("{0}, failed, {1}", VssUserToAddMailAddress, e.InnerException.Message);
+                }
                 Console.WriteLine("\r\nSomething went wrong...");
                 Console.WriteLine(e.Message);
                 if (e.InnerException != null)
@@ -228,7 +265,22 @@ namespace VstsUserManagement.ConsoleApp
             }
         }
 
-
+        private static void AddUserToSecurityGroup(string VssTeamProjectName, string VssSecurityGroup, string VssUserToAddMailAddress)
+        {
+          var  projectClient = vssConnection.GetClient<ProjectHttpClient>();
+            TeamProject teamProject = projectClient.GetProject(VssTeamProjectName).Result;
+            var groups = identityClient.ListGroupsAsync(new Guid[] { teamProject.Id }).Result;
+            var rGroup = groups.Where(x=> x.DisplayName.EndsWith(VssSecurityGroup)).SingleOrDefault();
+            var userIdentity = identityClient.ReadIdentitiesAsync(IdentitySearchFilter.AccountName,
+                                                                     VssUserToAddMailAddress).Result.FirstOrDefault();
+            if (userIdentity!=null && rGroup != null)
+            {
+                bool result = identityClient.AddMemberToGroupAsync(rGroup.Descriptor,
+                                                                      userIdentity.Descriptor).Result;
+            }
+            
+          
+        }
     }
 
 }
