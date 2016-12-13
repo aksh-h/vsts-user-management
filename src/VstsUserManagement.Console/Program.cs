@@ -92,14 +92,14 @@ namespace VstsUserManagement.ConsoleApp
 
         private static int RunAddUsersAndReturnExitCode(AddUsers opts)
         {
-            throw new NotImplementedException();
             var csvRows = File.ReadAllLines(opts.Csv);
             foreach (var row in csvRows)
             {
                 string[] bits = row.Split(',');
-                License VssLicense = ConvertStringToLicence(bits[1]);
+                License VssLicense = ConvertStringToLicence(bits[1].ToLower());
                 AddUserToAccount(opts.VssAccountName, opts.VssAccountUrl, bits[0], VssLicense);
             }
+            return 0;
         }
 
         private static int RunAddUserAndReturnExitCode(AddUser opts)
@@ -133,7 +133,7 @@ namespace VstsUserManagement.ConsoleApp
                 //    break;
                 default:
                     Console.WriteLine("Error: License must be Basic, Professional, Advanced, or MSDN");
-                    throw new Exception("Error: License must be Basic, Professional, Advanced, or MSDN");
+                     throw new Exception("Error: License must be Basic, Professional, Advanced, or MSDN");
             }
             return VssLicense;
         }
@@ -168,7 +168,7 @@ namespace VstsUserManagement.ConsoleApp
 
                     // We are adding the user to a collection, and at the moment only one collection is supported per
                     // account in VSO.
-                    var collectionScope = identityClient.GetScopeAsync("DefaultCollection").Result;
+                    var collectionScope = identityClient.GetScopeAsync(VssAccountName).Result;
 
                     // First get the descriptor for the licensed users group, which is a well known (built in) group.
                     var licensedUsersGroupDescriptor = new IdentityDescriptor(IdentityConstants.TeamFoundationType,
