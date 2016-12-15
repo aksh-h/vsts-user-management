@@ -189,7 +189,7 @@ namespace VstsUserManagement.ConsoleApp
                 if (userIdentity == null)
                 {
                     var username = VssUserToAddMailAddress.Substring(0, VssUserToAddMailAddress.IndexOf("@"));
-                    userIdentity = identityClient.ReadIdentitiesAsync(IdentitySearchFilter.General, VssUserToAddMailAddress).Result.FirstOrDefault();
+                    userIdentity = identityClient.ReadIdentitiesAsync(IdentitySearchFilter.MailAddress, VssUserToAddMailAddress).Result.FirstOrDefault();
                 }
                 // If the identity is null, this is a user that has not yet been added to the account.
                 // We'll need to add the user as a "bind pending" - meaning that the email address of the identity is 
