@@ -42,7 +42,7 @@ namespace VstsUserManagement.ConsoleApp
             public string VssUserToAddMailAddress { get; set; }
             [Option('l', "VssLicense", Required = true, HelpText = "VssLicense")]
             public string VssLicense { get; set; }
-            
+
         }
         [Verb("addusers", HelpText = "Add Users from file.")]
         class AddUsers : BaseOptions
@@ -53,8 +53,8 @@ namespace VstsUserManagement.ConsoleApp
 
         public static int Main(string[] args)
         {
-           // Telemetry.Current.TrackEvent("ApplicationStart");
-           // AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+            // Telemetry.Current.TrackEvent("ApplicationStart");
+            // AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
             DateTime startTime = DateTime.Now;
             Stopwatch mainTimer = new Stopwatch();
             mainTimer.Start();
@@ -64,9 +64,9 @@ namespace VstsUserManagement.ConsoleApp
             //////////////////////////////////////////////////
             Trace.WriteLine(System.Reflection.Assembly.GetExecutingAssembly().GetName().Name, "VstsUserManagement");
             Trace.WriteLine(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(), "VstsUserManagement");
-           // Trace.WriteLine(string.Format("Telemitery Enabled: {0}", Telemetry.Current.IsEnabled().ToString()), "VstsUserManagement");
-           // Trace.WriteLine(string.Format("SessionID: {0}", Telemetry.Current.Context.Session.Id), "VstsUserManagement");
-           // Trace.WriteLine(string.Format("User: {0}", Telemetry.Current.Context.User.Id), "VstsUserManagement");
+            // Trace.WriteLine(string.Format("Telemitery Enabled: {0}", Telemetry.Current.IsEnabled().ToString()), "VstsUserManagement");
+            // Trace.WriteLine(string.Format("SessionID: {0}", Telemetry.Current.Context.Session.Id), "VstsUserManagement");
+            // Trace.WriteLine(string.Format("User: {0}", Telemetry.Current.Context.User.Id), "VstsUserManagement");
             Trace.WriteLine(string.Format("Start Time: {0}", startTime.ToUniversalTime()), "VstsUserManagement");
             Trace.WriteLine("----------------------------------------------------------------", "VstsUserManagement");
             Trace.WriteLine("------------------------------START-----------------------------", "VstsUserManagement");
@@ -112,7 +112,7 @@ namespace VstsUserManagement.ConsoleApp
                 {
                     AddUserToSecurityGroup(opts.Project, opts.Group, bits[0]);
                 }
-                
+
             }
             return 0;
         }
@@ -169,14 +169,14 @@ namespace VstsUserManagement.ConsoleApp
                 //    break;
                 default:
                     Console.WriteLine("Error: License must be Basic, Professional, Advanced, or MSDN");
-                     throw new Exception("Error: License must be Basic, Professional, Advanced, or MSDN");
+                    throw new Exception("Error: License must be Basic, Professional, Advanced, or MSDN");
             }
             return VssLicense;
         }
 
-       static List<string> fubarAccounts = new List<string>();
+        static List<string> fubarAccounts = new List<string>();
 
-            private static void AddUserToAccount(string VssAccountName, string VssUserToAddMailAddress, License VssLicense)
+        private static void AddUserToAccount(string VssAccountName, string VssUserToAddMailAddress, License VssLicense)
         {
             try
             {
@@ -267,19 +267,19 @@ namespace VstsUserManagement.ConsoleApp
 
         private static void AddUserToSecurityGroup(string VssTeamProjectName, string VssSecurityGroup, string VssUserToAddMailAddress)
         {
-          var  projectClient = vssConnection.GetClient<ProjectHttpClient>();
+            var projectClient = vssConnection.GetClient<ProjectHttpClient>();
             TeamProject teamProject = projectClient.GetProject(VssTeamProjectName).Result;
             var groups = identityClient.ListGroupsAsync(new Guid[] { teamProject.Id }).Result;
-            var rGroup = groups.Where(x=> x.DisplayName.EndsWith(VssSecurityGroup)).SingleOrDefault();
+            var rGroup = groups.Where(x => x.DisplayName.EndsWith(VssSecurityGroup)).SingleOrDefault();
             var userIdentity = identityClient.ReadIdentitiesAsync(IdentitySearchFilter.AccountName,
                                                                      VssUserToAddMailAddress).Result.FirstOrDefault();
-            if (userIdentity!=null && rGroup != null)
+            if (userIdentity != null && rGroup != null)
             {
                 bool result = identityClient.AddMemberToGroupAsync(rGroup.Descriptor,
                                                                       userIdentity.Descriptor).Result;
             }
-            
-          
+
+
         }
     }
 
