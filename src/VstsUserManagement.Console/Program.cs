@@ -164,9 +164,9 @@ namespace VstsUserManagement.ConsoleApp
                     VssLicense = MsdnLicense.Eligible;
                     break;
                 // Uncomment the code for Stakeholder if you are using VS 2013 Update 4 or newer.
-                //case "Stakeholder":
-                //    VssLicense = AccountLicense.Stakeholder;
-                //    break;
+                case "stakeholder":
+                    VssLicense = AccountLicense.Stakeholder;
+                    break;
                 default:
                     Console.WriteLine("Error: License must be Basic, Professional, Advanced, or MSDN");
                      throw new Exception("Error: License must be Basic, Professional, Advanced, or MSDN");
